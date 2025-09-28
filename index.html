@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>AI Object Detection — High-End Single File</title>
+<title>AI Object Detection — Mobile & Desktop</title>
 
 <!-- Materialize CSS -->
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
@@ -31,13 +31,13 @@ html, body {
 /* ===== Animated Gradient Title ===== */
 .glow-title {
   font-weight:700;
-  font-size:2.2rem;
+  font-size:2rem;
   background: linear-gradient(90deg,#00ffd1,#ff00ff,#00ffd1);
   background-size:300% 300%;
   -webkit-background-clip:text;
   -webkit-text-fill-color:transparent;
   animation: gradientAnim 3s ease infinite;
-  text-shadow: 0 0 15px rgba(0,255,209,0.2), 0 0 25px rgba(255,0,255,0.1);
+  text-shadow: 0 0 12px rgba(0,255,209,0.2), 0 0 18px rgba(255,0,255,0.1);
 }
 @keyframes gradientAnim{
   0%{background-position:0% 50%;}
@@ -52,14 +52,11 @@ html, body {
   text-align:center;
 }
 
-p.lead { color:#cfeeee; margin:0 0 12px; font-size:1.1rem; }
-
 .video-wrap{
   margin:18px auto;
   width: var(--width-desktop);
   max-width:95%;
   position:relative;
-  display:inline-block;
   border-radius:14px;
   overflow:hidden;
   box-shadow: 0 10px 50px rgba(0,0,0,0.7), 0 0 40px rgba(0,255,209,0.08) inset;
@@ -82,30 +79,27 @@ canvas{
   transform: scaleX(-1);
 }
 
-.controls{ display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:18px; }
-.card-ctrl{
-  min-width:220px; max-width:320px;
-  border-radius:12px;
-  background: rgba(10,26,32,0.7);
-  box-shadow:0 6px 18px rgba(0,255,209,0.4);
-  padding:12px 14px; color:#e8f6f5;
-  text-align:left;
-  transition:0.3s all;
+/* ===== Floating AI button ===== */
+#aiButton{
+  position:absolute;
+  bottom:12px;
+  right:12px;
+  background: rgba(0,255,209,0.9);
+  color: #071029;
+  border:none;
+  padding:10px 16px;
+  font-size:0.9rem;
+  font-weight:bold;
+  border-radius:8px;
+  cursor:pointer;
+  z-index:10;
+  box-shadow: 0 4px 12px rgba(0,255,209,0.4);
 }
-.card-ctrl:hover{
-  transform: translateY(-3px);
-  box-shadow: 0 12px 30px rgba(0,255,209,0.6);
-}
-
-label.small { display:block; font-size:0.9rem; color:#cde; margin-bottom:6px; }
-.status{ margin-top:8px; color:#bfeee7; font-size:0.95rem; }
-
-@media(max-width:720px){
-  :root { --width-desktop:92vw; }
-  .card-ctrl { min-width:160px; }
+#aiButton:hover{
+  opacity:0.85;
 }
 
-/* ===== Animated Background Particles ===== */
+/* ===== Particles Background ===== */
 #particles{
   position:fixed;
   top:0; left:0;
@@ -114,6 +108,12 @@ label.small { display:block; font-size:0.9rem; color:#cde; margin-bottom:6px; }
   pointer-events:none;
   background: radial-gradient(circle at center, #071029 0%, #0f3a4b 100%);
 }
+
+@media(max-width:720px){
+  :root { --width-desktop:95vw; }
+  .glow-title { font-size:1.6rem; }
+  #aiButton { padding:8px 12px; font-size:0.85rem; }
+}
 </style>
 </head>
 <body>
@@ -121,59 +121,19 @@ label.small { display:block; font-size:0.9rem; color:#cde; margin-bottom:6px; }
 
 <div class="container-centered">
   <h1 class="glow-title">⚡ AI Object Detection ⚡</h1>
-  <p class="lead">Webcam + COCO-SSD (ml5.js). Toggle AI and watch objects glow like magic!</p>
 
   <div id="videoArea" class="video-wrap" aria-live="polite">
     <video id="video" playsinline autoplay muted></video>
     <canvas id="overlay"></canvas>
-  </div>
 
-  <div class="controls" role="region" aria-label="controls">
-    <div class="card-ctrl">
-      <label class="small">AI Detection</label>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span>Off</span>
-        <div class="switch" style="margin-left:6px;">
-          <label>
-            <input type="checkbox" id="aiToggle" disabled>
-            <span class="lever"></span>
-          </label>
-        </div>
-        <span>On</span>
-      </div>
-      <div id="status" class="status">Model: <strong id="modelState">loading…</strong></div>
-    </div>
-
-    <div class="card-ctrl">
-      <label class="small" for="fpsRange">FPS (detection frequency)</label>
-      <input type="range" id="fpsRange" min="1" max="60" value="25" />
-      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:0.9rem;">
-        <span>1</span><span id="fpsValue">25</span><span>60</span>
-      </div>
-      <div style="margin-top:8px;font-size:0.85rem;color:#bfeee7;">Lower FPS reduces CPU load. Video still shown at browser framerate.</div>
-    </div>
-
-    <div class="card-ctrl">
-      <label class="small" for="confidenceRange">Confidence Threshold (%)</label>
-      <input type="range" id="confidenceRange" min="0" max="100" value="50" />
-      <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:0.9rem;">
-        <span>0</span><span id="confValue">50</span><span>100</span>
-      </div>
-      <div style="margin-top:8px;font-size:0.85rem;color:#bfeee7;">Only show boxes above this confidence.</div>
-    </div>
-
-    <div class="card-ctrl" id="miscCard">
-      <label class="small">Developer / Info</label>
-      <div style="font-size:0.9rem;color:#cfeeee;">
-        <div id="errorMsg" style="color:#ffb3b3;min-height:20px;"></div>
-        <div style="margin-top:6px;">Model: <strong>COCO-SSD (ml5)</strong></div>
-      </div>
-    </div>
+    <!-- Floating AI Toggle Button -->
+    <button id="aiButton">Turn AI On</button>
   </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
 <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+
 <script>
 // ===== Particles Background =====
 particlesJS("particles", {
@@ -187,23 +147,15 @@ particlesJS("particles", {
 });
 </script>
 
-<!-- Existing AI Object Detection JS (same as previous optimized version) -->
 <script>
 (async function(){
 const video = document.getElementById('video');
 const canvas = document.getElementById('overlay');
 const ctx = canvas.getContext('2d', {alpha:true});
-const aiToggle = document.getElementById('aiToggle');
-const fpsRange = document.getElementById('fpsRange');
-const fpsValue = document.getElementById('fpsValue');
-const modelStateEl = document.getElementById('modelState');
-const errorMsgEl = document.getElementById('errorMsg');
-const confidenceRange = document.getElementById('confidenceRange');
-const confValue = document.getElementById('confValue');
+const aiButton = document.getElementById('aiButton');
 
-let detector=null, modelLoaded=false, lastDetectTime=0, boundingCache=[], pulse=0;
-fpsValue.textContent=fpsRange.value;
-confValue.textContent=confidenceRange.value;
+let detector=null, modelLoaded=false, boundingCache=[], pulse=0;
+let aiActive = false;
 
 function colorForLabel(label){
   let hash=0; for(let i=0;i<label.length;i++) hash=label.charCodeAt(i)+((hash<<5)-hash);
@@ -212,36 +164,37 @@ function colorForLabel(label){
 }
 
 async function startCamera(){
-  errorMsgEl.textContent='';
   try{
     const stream=await navigator.mediaDevices.getUserMedia({video:{ width:{ideal:1280}, height:{ideal:720}, facingMode:"environment" }, audio:false});
     video.srcObject=stream; await video.play();
     await new Promise(resolve=>{if(video.readyState>=2)resolve(); else video.addEventListener('loadedmetadata',resolve,{once:true});});
     resizeCanvasToVideo(); window.addEventListener('resize', resizeCanvasToVideo);
-  }catch(err){console.error(err); errorMsgEl.textContent='Unable to access camera. Grant permission or use HTTPS.'; modelStateEl.textContent='no camera';}
+  }catch(err){ console.error(err); alert('Camera access denied or unavailable'); }
 }
 
-function resizeCanvasToVideo(){const rect=video.getBoundingClientRect(); const ratio=window.devicePixelRatio||1;
-canvas.width=(video.videoWidth||rect.width)*ratio; canvas.height=(video.videoHeight||rect.height)*ratio;
-canvas.style.width=rect.width+'px'; canvas.style.height=rect.height+'px'; ctx.setTransform(ratio,0,0,ratio,0,0);
+function resizeCanvasToVideo(){
+  const rect=video.getBoundingClientRect();
+  const ratio=window.devicePixelRatio||1;
+  canvas.width=(video.videoWidth||rect.width)*ratio;
+  canvas.height=(video.videoHeight||rect.height)*ratio;
+  canvas.style.width=rect.width+'px';
+  canvas.style.height=rect.height+'px';
+  ctx.setTransform(ratio,0,0,ratio,0,0);
 }
 
-function loadModelWithTimeout(timeoutMs=20000){
-  modelStateEl.textContent='loading…';
-  return new Promise((resolve,reject)=>{
-    let timeout=setTimeout(()=>{const err=new Error('Model load timed out'); console.error(err); errorMsgEl.textContent='Model load timed out.'; reject(err);},timeoutMs);
-    try{detector=ml5.objectDetector('cocossd',{},()=>{clearTimeout(timeout); modelLoaded=true; aiToggle.disabled=false; modelStateEl.textContent='ready'; resolve(detector);});}
-    catch(err){clearTimeout(timeout); console.error(err); errorMsgEl.textContent='Failed to load model.'; reject(err);}
+function loadModel(){
+  return new Promise((resolve)=>{
+    detector=ml5.objectDetector('cocossd',{},()=>{ modelLoaded=true; resolve(detector); });
   });
 }
 
 function drawFrame(now){
   resizeCanvasToVideo();
-  try{ctx.clearRect(0,0,canvas.width,canvas.height); ctx.save(); ctx.drawImage(video,0,0,canvas.width,canvas.height); ctx.fillStyle='rgba(0,0,0,0.06)'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.restore();}
-  catch(e){}
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.save(); ctx.drawImage(video,0,0,canvas.width,canvas.height); ctx.restore();
+
   pulse=(Math.sin(now/500)+1)/2;
   boundingCache.forEach(obj=>{
-    if(obj.confidence*100 < confidenceRange.value) return;
     const color=colorForLabel(obj.label);
     ctx.save();
     ctx.strokeStyle=color;
@@ -250,43 +203,42 @@ function drawFrame(now){
     ctx.shadowBlur=12*pulse+2;
     ctx.strokeRect(obj.x,obj.y,obj.width,obj.height);
     const label=`${obj.label} ${(obj.confidence*100).toFixed(1)}%`;
-    ctx.font=`${14+Math.round(canvas.width/500)}px Arial, Helvetica, sans-serif`;
+    ctx.font=`${14+Math.round(canvas.width/500)}px Arial`;
     const padding=6; const metrics=ctx.measureText(label);
     const textW=metrics.width+padding*2; const textH=parseInt(ctx.font,10)+padding*0.8;
     ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(obj.x,Math.max(0,obj.y-textH),textW,textH);
     ctx.fillStyle=color; ctx.fillText(label,obj.x+padding,Math.max(textH-(padding/2),obj.y+4));
     ctx.restore();
   });
+
   requestAnimationFrame(drawFrame);
 }
 
-function detectionLoop(now){
-  const fps=Math.max(1,Math.min(60,parseInt(fpsRange.value,10))); const interval=1000/fps;
-  if(modelLoaded && aiToggle.checked && detector && now-lastDetectTime>interval){
-    detector.detect(video,(err,results)=>{ lastDetectTime=now; if(err){ console.error(err); errorMsgEl.textContent='Detection error.'; return; }
-    boundingCache=(results||[]).map(r=>({label:r.label,confidence:r.confidence||0,x:Math.max(0,Math.round(r.x)),y:Math.max(0,Math.round(r.y)),width:Math.round(r.width),height:Math.round(r.height)}));
+function detectionLoop(){
+  if(modelLoaded && aiActive && detector){
+    detector.detect(video,(err,results)=>{
+      if(!err && results){
+        boundingCache=results.map(r=>({label:r.label,confidence:r.confidence||0,x:r.x,y:r.y,width:r.width,height:r.height}));
+      }
     });
   }
   requestAnimationFrame(detectionLoop);
 }
 
 async function init(){
-  modelStateEl.textContent='starting camera';
   await startCamera();
-  if(!video.srcObject){ modelStateEl.textContent='no camera'; return; }
-  resizeCanvasToVideo();
-  try{ modelStateEl.textContent='loading model'; await loadModelWithTimeout(25000); }catch(e){ modelStateEl.textContent='model error'; console.error(e); }
-  fpsRange.addEventListener('input',()=>{ fpsValue.textContent=fpsRange.value; });
-  confidenceRange.addEventListener('input',()=>{ confValue.textContent=confidenceRange.value; });
-  aiToggle.addEventListener('change',()=>{ if(!aiToggle.checked) boundingCache=[]; });
+  await loadModel();
   requestAnimationFrame(drawFrame);
   requestAnimationFrame(detectionLoop);
-  modelStateEl.textContent=modelLoaded?'ready':'not ready';
 }
 
-init().catch(err=>{ console.error(err); errorMsgEl.textContent='Initialization failed.'; });
+// ===== Floating Button Event =====
+aiButton.addEventListener('click',()=>{
+  aiActive = !aiActive;
+  aiButton.textContent = aiActive ? 'AI On' : 'Turn AI On';
+});
 
-setTimeout(()=>{ if(video && video.paused){ modelStateEl.textContent='tap to start camera'; const clickable=document.createElement('div'); clickable.setAttribute('role','button'); clickable.tabIndex=0; clickable.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:auto;'; const btn=document.createElement('button'); btn.textContent='Start camera'; btn.className='btn-large'; btn.style.opacity='0.96'; clickable.appendChild(btn); document.body.appendChild(clickable); clickable.addEventListener('click',async()=>{ document.body.removeChild(clickable); try{ await init(); }catch(e){ console.error(e); }},{once:true}); } },1200);
+init();
 })();
 </script>
 </body>
