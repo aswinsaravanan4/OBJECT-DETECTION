@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AI Object Detection — High-End Single File</title>
+
+  <!-- Materialize CSS (CDN) -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css">
+
+  <!-- ml5.js (CDN) -->
+  <script src="https://unpkg.com/ml5@0.12.2/dist/ml5.min.js"></script>
+
+  <style>
+    /* ---------- Layout & Theme ---------- */
+    :root{
+      --width-desktop: 800px;
+      --height-desktop: 560px;
+      --accent: #00ffd1;
+      --bg1: #071029;
+      --bg2: #0f3a4b;
+    }
+    html,body{
+      height:100%;
+      margin:0;
+      font-family: "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(135deg,var(--bg1),var(--bg2));
+      color: #e8f6f5;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+    }
+    .container-centered{
+      max-width: 1100px;
+      margin: 24px auto;
+      padding: 18px;
+      text-align:center;
+    }
+
+    h1{ margin: 6px 0 2px; font-weight:600; letter-spacing:0.6px; }
+    p.lead { color:#cfeeee; margin-top:0; margin-bottom:12px; }
+
+    /* ---------- Video + Canvas ---------- */
+    .video-wrap{
+      margin: 18px auto;
+      width: var(--width-desktop);
+      max-width: 95%;
+      position: relative;
+      display:inline-block;
+      border-radius: 14px;
+      overflow: hidden;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6), 0 0 30px rgba(0,255,209,0.06) inset;
+      background: rgba(0,0,0,0.18);
+    }
+
+    video{
+      display:block;
+      width:100%;
+      height: auto;
+      transform: scaleX(-1); /* mirror for a webcam HUD feel */
+      -webkit-transform: scaleX(-1);
+    }
+
+    canvas{
+      position:absolute;
+      top:0; left:0;
+      width:100%;
+      height:100%;
+      pointer-events:none;
+      transform: scaleX(-1); /* keep overlay aligned with mirrored video */
+      -webkit-transform: scaleX(-1);
+    }
+
+    /* ---------- Controls ---------- */
+    .controls{
+      display:flex;
+      gap:12px;
+      justify-content:center;
+      flex-wrap:wrap;
+      margin-top:18px;
+    }
+
+    .card-ctrl{
+      min-width:220px;
+      max-width:320px;
+      border-radius:12px;
+      background: rgba(10,26,32,0.6);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.6);
+      padding:12px 14px;
+      color:#e8f6f5;
+      text-align:left;
+    }
+
+    label.small { display:block; font-size:0.9rem; color:#cde; margin-bottom:6px; }
+    .status{
+      margin-top:8px;
+      color:#bfeee7;
+      font-size:0.95rem;
+    }
+
+    .glow-title{
+      text-shadow: 0 0 10px rgba(0,255,209,0.12), 0 0 20px rgba(0,255,209,0.06);
+    }
+
+    /* Responsive small adjustments */
+    @media (max-width:720px){
+      :root { --width-desktop: 92vw; }
+      .card-ctrl { min-width: 160px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container-centered">
+    <h1 class="glow-title">AI Object Detection — High-End (Single File)</h1>
+    <p class="lead">Webcam + COCO-SSD (ml5.js). Toggle AI to detect objects. No external copyrighted assets used.</p>
+
+    <div id="videoArea" class="video-wrap" aria-live="polite">
+      <!-- Note: video is mirrored (scaleX(-1)) to feel like a self-camera HUD -->
+      <video id="video" playsinline autoplay muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+
+    <div class="controls" role="region" aria-label="controls">
+      <div class="card-ctrl">
+        <label class="small">AI Detection</label>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span>Off</span>
+          <div class="switch" style="margin-left:6px;">
+            <label>
+              <input type="checkbox" id="aiToggle" disabled>
+              <span class="lever"></span>
+            </label>
+          </div>
+          <span>On</span>
+        </div>
+        <div id="status" class="status">Model: <strong id="modelState">loading…</strong></div>
+      </div>
+
+      <div class="card-ctrl">
+        <label class="small" for="fpsRange">FPS (detection frequency)</label>
+        <input type="range" id="fpsRange" min="1" max="60" value="25" />
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:0.9rem;">
+          <span>1</span><span id="fpsValue">25</span><span>60</span>
+        </div>
+        <div style="margin-top:8px;font-size:0.85rem;color:#bfeee7;">
+          Lower FPS reduces CPU load. Video still shown at browser framerate.
+        </div>
+      </div>
+
+      <div class="card-ctrl" id="miscCard">
+        <label class="small">Developer / Info</label>
+        <div style="font-size:0.9rem;color:#cfeeee;">
+          <div id="errorMsg" style="color:#ffb3b3;min-height:20px;"></div>
+          <div style="margin-top:6px;">Model: <strong>COCO-SSD (ml5)</strong></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Materialize JS (only for UI nicety; page works without it) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+
+  <script>
+  (function () {
+    // ---------- DOM ----------
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('overlay');
+    const ctx = canvas.getContext('2d', { alpha: true });
+    const aiToggle = document.getElementById('aiToggle');
+    const fpsRange = document.getElementById('fpsRange');
+    const fpsValue = document.getElementById('fpsValue');
+    const modelStateEl = document.getElementById('modelState');
+    const errorMsgEl = document.getElementById('errorMsg');
+
+    // ---------- State ----------
+    let detector = null;
+    let modelLoaded = false;
+    let lastDetectTime = 0;
+    let lastFrameTime = 0;
+    let requestedResolution = { width: 1280, height: 720 }; // prefer HD; browser may scale
+    let boundingCache = []; // last detections
+    let pulse = 0;
+
+    fpsValue.textContent = fpsRange.value;
+
+    // ---------- Utility: Deterministic color per label ----------
+    function colorForLabel(label) {
+      // simple deterministic HSL based on string hash
+      let hash = 0;
+      for (let i = 0; i < label.length; i++) hash = label.charCodeAt(i) + ((hash << 5) - hash);
+      const h = Math.abs(hash) % 360;
+      return `hsl(${h} 90% 55%)`; // modern CSS hsl with spaces
+    }
+
+    // ---------- Setup camera with graceful fallbacks ----------
+    async function startCamera() {
+      errorMsgEl.textContent = '';
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: requestedResolution.width },
+            height: { ideal: requestedResolution.height },
+            facingMode: "environment" // prefer rear camera on phones; user can switch in browser
+          },
+          audio: false
+        });
+        video.srcObject = stream;
+        await video.play();
+        // Wait until video metadata loaded so we can size canvas correctly
+        await new Promise(resolve => {
+          if (video.readyState >= 2) return resolve();
+          video.addEventListener('loadedmetadata', resolve, { once: true });
+        });
+
+        resizeCanvasToVideo();
+        window.addEventListener('resize', resizeCanvasToVideo);
+      } catch (err) {
+        console.error('Camera error:', err);
+        errorMsgEl.textContent = 'Unable to access camera. Grant permission or use a secure origin (HTTPS).';
+        modelStateEl.textContent = 'no camera';
+      }
+    }
+
+    // ---------- Resize canvas to match actual displayed video pixel size ----------
+    function resizeCanvasToVideo() {
+      const rect = video.getBoundingClientRect();
+      // Set canvas pixel size to video's intrinsic resolution for crisp drawing
+      const videoWidth = video.videoWidth || rect.width;
+      const videoHeight = video.videoHeight || rect.height;
+
+      // Handle zero sizes gracefully
+      const w = Math.max(1, Math.round(videoWidth));
+      const h = Math.max(1, Math.round(videoHeight));
+
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = rect.width + 'px';
+      canvas.style.height = rect.height + 'px';
+    }
+
+    // ---------- Load model with timeout fallback ----------
+    function loadModelWithTimeout(timeoutMs = 20000) {
+      modelStateEl.textContent = 'loading…';
+      errorMsgEl.textContent = '';
+
+      return new Promise((resolve, reject) => {
+        let timeout = setTimeout(() => {
+          const err = new Error('Model load timed out');
+          console.error(err);
+          errorMsgEl.textContent = 'Model load timed out. Check network.';
+          reject(err);
+        }, timeoutMs);
+
+        // ml5.objectDetector returns detector in callback
+        try {
+          detector = ml5.objectDetector('cocossd', {}, () => {
+            clearTimeout(timeout);
+            modelLoaded = true;
+            aiToggle.disabled = false;
+            modelStateEl.textContent = 'ready';
+            resolve(detector);
+          });
+        } catch (err) {
+          clearTimeout(timeout);
+          console.error('Model load error:', err);
+          errorMsgEl.textContent = 'Failed to load model.';
+          reject(err);
+        }
+      });
+    }
+
+    // ---------- Draw one frame (video background + cached boxes) ----------
+    function drawFrame(now) {
+      // ensure canvas matches video intrinsic pixels (avoid stretching)
+      resizeCanvasToVideo();
+
+      // draw mirrored video frame to canvas (we mirror video element via CSS transform)
+      try {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        // Draw a subtle dark overlay behind boxes for contrast
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        // a slight dim to produce high-end HUD look
+        ctx.fillStyle = 'rgba(0,0,0,0.06)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.restore();
+      } catch (e) {
+        // drawing can sometimes fail early if video not ready
+      }
+
+      // pulse for glow effect
+      pulse = (Math.sin(now / 500) + 1) / 2; // 0..1
+
+      // draw bounding boxes from last detection
+      boundingCache.forEach(obj => {
+        const color = colorForLabel(obj.label);
+        // stroke
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(2, Math.round(canvas.width / 320));
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 8 * pulse + 2;
+        ctx.strokeRect(obj.x, obj.y, obj.width, obj.height);
+
+        // label background
+        const label = `${obj.label} ${(obj.confidence * 100).toFixed(1)}%`;
+        ctx.font = `${14 + Math.round(canvas.width / 500)}px Arial, Helvetica, sans-serif`;
+        const padding = 6;
+        const metrics = ctx.measureText(label);
+        const textW = metrics.width + (padding * 2);
+        const textH = parseInt(ctx.font, 10) + (padding * 0.8);
+
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(obj.x, Math.max(0, obj.y - textH), textW, textH);
+
+        // text
+        ctx.fillStyle = color;
+        ctx.fillText(label, obj.x + padding, Math.max(textH - (padding/2), obj.y + 4));
+        ctx.restore();
+      });
+
+      // request next frame
+      requestAnimationFrame(drawFrame);
+    }
+
+    // ---------- Run detection at requested FPS when enabled ----------
+    function detectionLoop(now) {
+      const fps = Math.max(1, Math.min(60, parseInt(fpsRange.value, 10)));
+      const interval = 1000 / fps;
+      if (modelLoaded && aiToggle.checked && detector && (now - lastDetectTime > interval)) {
+        // invoke detection
+        try {
+          detector.detect(video, (err, results) => {
+            lastDetectTime = now;
+            if (err) {
+              console.error('Detect error:', err);
+              errorMsgEl.textContent = 'Detection error. See console.';
+              return;
+            }
+            // Basic filtering + map to integer pixel values
+            boundingCache = (results || []).map(r => ({
+              label: r.label,
+              confidence: r.confidence || 0,
+              x: Math.max(0, Math.round(r.x)),
+              y: Math.max(0, Math.round(r.y)),
+              width: Math.round(r.width),
+              height: Math.round(r.height)
+            }));
+          });
+        } catch (err) {
+          console.error('Detection invocation failed:', err);
+        }
+      }
+      requestAnimationFrame(detectionLoop);
+    }
+
+    // ---------- Safe initialization ----------
+    async function init() {
+      // show helpful text
+      modelStateEl.textContent = 'starting camera';
+
+      await startCamera();
+
+      // if camera failed, stop
+      if (!video.srcObject) {
+        modelStateEl.textContent = 'no camera';
+        return;
+      }
+
+      // set canvas initial size to video size
+      resizeCanvasToVideo();
+
+      // load the model
+      try {
+        modelStateEl.textContent = 'loading model';
+        await loadModelWithTimeout(25000);
+      } catch (e) {
+        modelStateEl.textContent = 'model error';
+        console.error(e);
+      }
+
+      // hook up listeners
+      fpsRange.addEventListener('input', () => {
+        fpsValue.textContent = fpsRange.value;
+      });
+
+      aiToggle.addEventListener('change', () => {
+        if (!aiToggle.checked) {
+          // clear boxes immediately when switching off
+          boundingCache = [];
+        }
+      });
+
+      // Start loops
+      requestAnimationFrame(drawFrame);
+      requestAnimationFrame(detectionLoop);
+
+      // helpful accessibility state
+      modelStateEl.textContent = modelLoaded ? 'ready' : 'not ready';
+    }
+
+    // Start on user gesture sometimes required by autoplay policies:
+    // Try to init immediately; if autoplay blocked, ask user to tap to start.
+    init().catch(err => {
+      console.error('Init error:', err);
+      errorMsgEl.textContent = 'Initialization failed. Check console.';
+    });
+
+    // If browser blocks autoplay (video stays paused), offer a click-to-start
+    setTimeout(() => {
+      if (video && video.paused) {
+        modelStateEl.textContent = 'tap to start camera';
+        const clickable = document.createElement('div');
+        clickable.setAttribute('role','button');
+        clickable.tabIndex = 0;
+        clickable.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:auto;';
+        const btn = document.createElement('button');
+        btn.textContent = 'Start camera';
+        btn.className = 'btn-large';
+        btn.style.opacity = '0.96';
+        clickable.appendChild(btn);
+        document.body.appendChild(clickable);
+        clickable.addEventListener('click', async () => {
+          document.body.removeChild(clickable);
+          try {
+            await init();
+          } catch (e) {
+            console.error(e);
+          }
+        }, { once: true });
+      }
+    }, 1200);
+  })();
+  </script>
+</body>
+</html>
